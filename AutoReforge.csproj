@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AutoReforge</AssemblyName>
+    <RootNamespace>AutoReforge</RootNamespace>
+    <OutputType>Library</OutputType>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <OutputPath>build\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TerrariaModsDir>C:\Program Files (x86)\Steam\steamapps\common\Terraria\TerrariaModder\mods\auto-reforge</TerrariaModsDir>
+  </PropertyGroup>
+
+  <Target Name="Deploy" AfterTargets="Build">
+    <MakeDir Directories="$(TerrariaModsDir)" />
+    <Copy SourceFiles="$(OutputPath)AutoReforge.dll" DestinationFolder="$(TerrariaModsDir)" />
+    <Copy SourceFiles="manifest.json" DestinationFolder="$(TerrariaModsDir)" />
+    <Message Text="[AutoReforge] Deployed to $(TerrariaModsDir)" Importance="high" />
+  </Target>
+
+  <!-- TerrariaModder Core — source reference so we always build against latest -->
+  <ItemGroup>
+    <ProjectReference Include="..\terraria-modder\src\Core\TerrariaModder.Core.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Terraria executable — compile-time only, already loaded at runtime -->
+  <ItemGroup>
+    <Reference Include="Terraria">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Terraria\Terraria.exe</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553">
+      <HintPath>C:\Windows\Microsoft.NET\assembly\GAC_32\Microsoft.Xna.Framework\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553">
+      <HintPath>C:\Windows\Microsoft.NET\assembly\GAC_32\Microsoft.Xna.Framework.Graphics\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.Graphics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

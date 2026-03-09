@@ -1,0 +1,17 @@
+{
+  "id": "auto-reforge",
+  "name": "Auto-Reforge",
+  "version": "1.0.0",
+  "framework_version": ">=0.2.0",
+  "author": "nabagaca",
+  "description": "Adds a modifier selector to the Goblin Tinkerer reforge UI. Pick a target modifier and auto-reforge until you get it.",
+  "entry_dll": "AutoReforge.dll",
+  "keybinds": [
+    {
+      "id": "toggle",
+      "label": "Toggle Auto-Reforge Panel",
+      "description": "Show/hide the modifier selector while at the Goblin Tinkerer",
+      "default": "F7"
+    }
+  ]
+}
