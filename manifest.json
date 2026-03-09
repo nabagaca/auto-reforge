@@ -1,7 +1,7 @@
 {
   "id": "auto-reforge",
   "name": "Auto-Reforge",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "framework_version": ">=0.2.0",
   "author": "nabagaca",
   "description": "Adds a modifier selector to the Goblin Tinkerer reforge UI. Pick a target modifier and auto-reforge until you get it.",
