@@ -6,7 +6,14 @@ using Terraria.Audio;
 using Terraria.ID;
 using TerrariaModder.Core.Logging;
 using TerrariaModder.Core.UI;
-using TerrariaModder.Core.UI.Widgets;
+using TerrariaModder.Core.UI.Widgets;  // WidgetInput, TextUtil
+using FlexUI;               // UIRect, Color4
+using Color4 = FlexUI.Color4;
+using UIStackLayout = FlexUI.Layout.StackLayout;
+using FlexUI.Panels;        // UIPanel
+using FlexUI.Scroll;        // ScrollRegion
+using UIButton     = FlexUI.Widgets.Button;
+using SliderState  = FlexUI.Widgets.SliderState;
 using Lang = Terraria.Lang;
 
 namespace AutoReforge
@@ -20,17 +27,26 @@ namespace AutoReforge
     public class ReforgeUI
     {
         // ── Layout constants ──────────────────────────────────────────────────────
-        private const int PanelWidth  = 240;
+        private const int PanelWidth  = 280;
         private const int PanelHeight = 560;
-        private const int RowHeight   = 22;
+        private const int RowHeight   = 24;
         private const int RowSpacing  = 2;
-        private const int FooterH     = 130; // status + sliders + buttons
+        // FooterH: 3 labels (auto-height) + 2 sliders (12px) + 3 spaces (4px each) + buttons (28px)
+        // All items get gap=2 added by StackLayout.Next, except the last item.
+        private static int FooterH
+        {
+            get
+            {
+                int lh = FlexUI.FontMetrics.LineHeight + 4; // matches StackLayout.Label auto-height
+                return 3 * (lh + 2) + 2 * (12 + 2) + 3 * 4 + 28 + 4; // +4 extra breathing room
+            }
+        }
 
         // ── State ─────────────────────────────────────────────────────────────────
-        private readonly DraggablePanel _panel;
-        private readonly ScrollView     _scroll    = new ScrollView();
-        private readonly Slider         _speedSlider     = new Slider();
-        private readonly Slider         _thresholdSlider = new Slider();
+        private readonly UIPanel      _panel;
+        private readonly ScrollRegion _scroll          = new ScrollRegion();
+        private readonly SliderState  _speedSt         = new SliderState();
+        private readonly SliderState  _thresholdSt     = new SliderState();
         private ILogger? _log;
 
         // Prefix list — rebuilt whenever the item in the reforge slot changes
@@ -58,11 +74,11 @@ namespace AutoReforge
 
         public ReforgeUI()
         {
-            _panel = new DraggablePanel("auto-reforge", "Auto-Reforge", PanelWidth, PanelHeight)
+            _panel = new UIPanel("auto-reforge", "Auto-Reforge", PanelWidth, PanelHeight)
             {
-                ClipContent    = false,
                 ShowCloseButton = true,
-                CloseOnEscape  = false,
+                CloseOnEscape   = false,
+                Resizable       = true,
             };
             _panel.OnClose = StopAuto;
         }
@@ -78,6 +94,7 @@ namespace AutoReforge
         public void Unload()
         {
             _panel.UnregisterDrawCallback();
+            _panel.Close();
             StopAuto();
         }
 
@@ -121,7 +138,7 @@ namespace AutoReforge
             var slot = Main.reforgeItem;
             if (slot != null && slot.type != _lastItemType)
             {
-                _lastItemType   = slot.type;
+                _lastItemType     = slot.type;
                 _selectedPrefixId = -1;
                 StopAuto();
                 RebuildPrefixList();
@@ -181,54 +198,67 @@ namespace AutoReforge
 
         private void OnDraw()
         {
-            if (!_panel.BeginDraw()) return;
+            // Close the panel if the game has returned to the main menu
+            if (Main.gameMenu)
+            {
+                if (_panel.IsOpen) { StopAuto(); _panel.Close(); }
+                return;
+            }
+            if (!_panel.Begin()) return;
             try { DrawContent(); }
-            finally { _panel.EndDraw(); }
+            finally { _panel.End(); }
         }
 
         private void DrawContent()
         {
-            int px = _panel.ContentX;
-            int py = _panel.ContentY;
-            int pw = _panel.ContentWidth;
+            var content = _panel.ContentRect;
 
-            // ── Info lines ────────────────────────────────────────────────────────
+            // Divide content: info strip at top, footer at bottom, list fills middle
+            var (footerRect, upper) = content.SliceBottom(FooterH);
+            var (infoRect,  listRect) = upper.SliceTop(38);
+
+            DrawInfoArea(infoRect);
+            DrawPrefixList(listRect);
+            DrawFooter(footerRect);
+        }
+
+        // ── Info area (item name + current modifier) ──────────────────────────────
+
+        private static void DrawInfoArea(UIRect rect)
+        {
             var slot    = Main.reforgeItem;
             bool hasItem = slot != null && slot.type > 0;
 
             UIRenderer.DrawText(
-                TextUtil.Truncate(hasItem ? $"Item: {slot!.Name}" : "Put an item in the reforge slot", pw),
-                px, py + 2, UIColors.TextHint);
+                TextUtil.Truncate(hasItem ? $"Item: {slot!.Name}" : "Put an item in the reforge slot", rect.W),
+                rect.X, rect.Y + 2, UIColors.TextHint);
 
             if (hasItem && slot!.prefix > 0)
                 UIRenderer.DrawText(
-                    TextUtil.Truncate($"Current: {Lang.prefix[slot.prefix]?.Value ?? "None"}", pw),
-                    px, py + 18, UIColors.TextDim);
-
-            // ── Prefix list ───────────────────────────────────────────────────────
-            int listY = py + 38;
-            int listH = PanelHeight - _panel.HeaderHeight - 38 - FooterH - _panel.Padding;
-            DrawPrefixList(px, listY, pw, listH, hasItem);
-
-            // ── Footer ────────────────────────────────────────────────────────────
-            DrawFooter(px, listY + listH + 6, pw);
+                    TextUtil.Truncate($"Current: {Lang.prefix[slot.prefix]?.Value ?? "None"}", rect.W),
+                    rect.X, rect.Y + 18, UIColors.TextDim);
         }
 
-        private void DrawPrefixList(int x, int y, int width, int height, bool hasItem)
+        // ── Prefix list ───────────────────────────────────────────────────────────
+
+        private void DrawPrefixList(UIRect listRect)
         {
-            UIRenderer.DrawRect(x, y, width, height, new Color4(25, 25, 40, 200));
+            UIRenderer.DrawRect(listRect.X, listRect.Y, listRect.W, listRect.H, new Color4(25, 25, 40, 200));
+
+            var slot    = Main.reforgeItem;
+            bool hasItem = slot != null && slot.type > 0;
 
             if (!hasItem || _prefixes == null || _prefixes.Count == 0)
             {
                 string msg = hasItem ? "Item cannot be reforged" : "No item in slot";
                 int tw = TextUtil.MeasureWidth(msg);
-                UIRenderer.DrawText(msg, x + (width - tw) / 2, y + height / 2 - 7, UIColors.TextHint);
-                UIRenderer.DrawRectOutline(x, y, width, height, new Color4(70, 70, 100), 1);
+                UIRenderer.DrawText(msg, listRect.X + (listRect.W - tw) / 2, listRect.Y + listRect.H / 2 - 7, UIColors.TextHint);
+                UIRenderer.DrawRectOutline(listRect.X, listRect.Y, listRect.W, listRect.H, new Color4(70, 70, 100), 1);
                 return;
             }
 
             int contentH = ComputeContentHeight();
-            _scroll.Begin(x, y, width, height, contentH);
+            _scroll.Begin(listRect, contentH);
 
             int itemY    = 0;
             int rowIndex = 0;
@@ -241,21 +271,23 @@ namespace AutoReforge
                 {
                     if (_scroll.IsVisible(itemY, 18))
                     {
-                        int ry = _scroll.ContentY + itemY;
-                        UIRenderer.DrawRect(x, ry, width, 18, new Color4(45, 45, 65, 220));
+                        int ry    = _scroll.ContentToScreen(itemY);
+                        int textY = ry + Math.Max(0, (18 - FlexUI.FontMetrics.CapHeight) / 2);
+                        UIRenderer.DrawRect(listRect.X, ry, listRect.W, 18, new Color4(45, 45, 65, 220));
                         UIRenderer.DrawText(PrefixData.GetTierLabel(info.Tier),
-                            x + 4, ry + 2, PrefixData.GetTierColor(info.Tier, rowIndex));
+                            listRect.X + 4, textY, PrefixData.GetTierColor(info.Tier, rowIndex));
                     }
-                    itemY  += 19;
+                    itemY   += 19;
                     lastTier = info.Tier;
                 }
 
                 // Prefix row
                 if (_scroll.IsVisible(itemY, RowHeight))
                 {
-                    int ry       = _scroll.ContentY + itemY;
+                    int  ry       = _scroll.ContentToScreen(itemY);
+                    int  cw       = _scroll.ContentWidth;
                     bool selected  = info.Id == _selectedPrefixId;
-                    bool hovered   = WidgetInput.IsMouseOver(x, ry, _scroll.ContentWidth, RowHeight);
+                    bool hovered   = WidgetInput.IsMouseOver(listRect.X, ry, cw, RowHeight);
                     bool isCurrent = Main.reforgeItem?.prefix == info.Id;
 
                     Color4 bg = selected
@@ -263,23 +295,26 @@ namespace AutoReforge
                         : hovered
                             ? new Color4(55, 55, 80, 210)
                             : PrefixData.GetTierBgColor(info.Tier);
-                    UIRenderer.DrawRect(x, ry, _scroll.ContentWidth, RowHeight, bg);
+
+                    // Scissor clip (set by ScrollRegion.Begin) handles boundary clipping.
+                    UIRenderer.DrawRect(listRect.X, ry, cw, RowHeight, bg);
 
                     if (isCurrent)
-                        UIRenderer.DrawRect(x, ry, 3, RowHeight, new Color4(255, 220, 50));
+                        UIRenderer.DrawRect(listRect.X, ry, 3, RowHeight, new Color4(255, 220, 50));
 
+                    int textY = ry + Math.Max(0, (RowHeight - FlexUI.FontMetrics.CapHeight) / 2);
                     string label = isCurrent ? $"> {info.Name}" : $"  {info.Name}";
                     UIRenderer.DrawText(
-                        TextUtil.Truncate(label, _scroll.ContentWidth - 20),
-                        x + 4, ry + (RowHeight - 14) / 2,
+                        TextUtil.Truncate(label, cw - 20),
+                        listRect.X + 4, textY,
                         PrefixData.GetTierColor(info.Tier, rowIndex));
 
                     if (selected)
                         UIRenderer.DrawText("✓",
-                            x + _scroll.ContentWidth - 14, ry + (RowHeight - 14) / 2,
+                            listRect.X + cw - 14, textY,
                             new Color4(200, 200, 80));
 
-                    if (hovered && WidgetInput.MouseLeftClick && !WidgetInput.BlockInput)
+                    if (hovered && WidgetInput.MouseLeftClick)
                     {
                         WidgetInput.ConsumeClick();
                         _selectedPrefixId = selected ? -1 : info.Id;
@@ -292,68 +327,43 @@ namespace AutoReforge
             }
 
             _scroll.End();
-            UIRenderer.DrawRectOutline(x, y, width, height, new Color4(70, 70, 100), 1);
+            UIRenderer.DrawRectOutline(listRect.X, listRect.Y, listRect.W, listRect.H, new Color4(70, 70, 100), 1);
         }
 
-        private void DrawFooter(int x, int y, int width)
-        {
-            // ── Speed slider ──────────────────────────────────────────────────────
-            // Range: 4–60 frames. Lower = faster. We label the right-hand value.
-            float reforgesPerSec = 60f / _reforgeInterval;
-            string speedLabel = $"Speed: {reforgesPerSec:F1}/s";
-            UIRenderer.DrawText(speedLabel, x, y, UIColors.TextDim);
-            _reforgeInterval = _speedSlider.Draw(x, y + 14, width, 12, _reforgeInterval, 4, 60);
+        // ── Footer (sliders + status + buttons) ───────────────────────────────────
 
-            // ── Threshold slider ──────────────────────────────────────────────────
-            // Range: 0–100 gold. Show "No min" when 0.
+        private void DrawFooter(UIRect footerRect)
+        {
+            var stack = new UIStackLayout(footerRect, gap: 2);
+
+            // Speed slider
+            float reforgesPerSec = 60f / _reforgeInterval;
+            stack.Label($"Speed: {reforgesPerSec:F1}/s", UIColors.TextDim);
+            _reforgeInterval = stack.Slider(_speedSt, _reforgeInterval, 4, 60, height: 12);
+            stack.Space(4);
+
+            // Money threshold slider
             string threshLabel = _minMoneyGold == 0
                 ? "Stop if low: No minimum"
                 : $"Stop if low: keep {_minMoneyGold}g";
-            UIRenderer.DrawText(threshLabel, x, y + 30, UIColors.TextDim);
-            _minMoneyGold = _thresholdSlider.Draw(x, y + 44, width, 12, _minMoneyGold, 0, 100);
+            stack.Label(threshLabel, UIColors.TextDim);
+            _minMoneyGold = stack.Slider(_thresholdSt, _minMoneyGold, 0, 100, height: 12);
+            stack.Space(4);
 
-            // ── Status line ───────────────────────────────────────────────────────
-            Color4 statusColor;
-            string statusText;
-            if (_autoRunning)
-            {
-                statusText  = $"Running… {_attempts} attempt{(_attempts == 1 ? "" : "s")}  {FormatCoins(_totalSpent)}";
-                statusColor = UIColors.Warning;
-            }
-            else
-            {
-                switch (_lastStopReason)
-                {
-                    case StopReason.Success:
-                        statusText  = $"Got it!  {_attempts} attempt{(_attempts == 1 ? "" : "s")}  ({FormatCoins(_totalSpent)})";
-                        statusColor = UIColors.Success;
-                        break;
-                    case StopReason.OutOfMoney:
-                        statusText  = $"Stopped: out of money  ({_attempts} attempts)";
-                        statusColor = UIColors.Error;
-                        break;
-                    case StopReason.BelowThreshold:
-                        statusText  = $"Stopped: below {_minMoneyGold}g threshold  ({_attempts} attempts)";
-                        statusColor = UIColors.Warning;
-                        break;
-                    default:
-                        bool hasSelection = _selectedPrefixId > 0;
-                        statusText  = hasSelection
-                            ? $"Target: {Lang.prefix[_selectedPrefixId]?.Value ?? $"#{_selectedPrefixId}"}"
-                            : "Select a modifier above";
-                        statusColor = hasSelection ? UIColors.Info : UIColors.TextHint;
-                        break;
-                }
-            }
-            UIRenderer.DrawText(TextUtil.Truncate(statusText, width), x, y + 60, statusColor);
+            // Status line
+            var (statusText, statusColor) = GetStatus();
+            stack.Label(TextUtil.Truncate(statusText, footerRect.W), statusColor);
+            stack.Space(4);
 
-            // ── Buttons ───────────────────────────────────────────────────────────
-            int btnY  = y + 78;
-            int halfW = (width - 4) / 2;
+            // Buttons — two halves of the next row
+            var btnRect = stack.Next(28);
+            int halfW   = (btnRect.W - 4) / 2;
+            var leftBtn  = new UIRect(btnRect.X,             btnRect.Y, halfW, 28);
+            var rightBtn = new UIRect(btnRect.X + halfW + 4, btnRect.Y, halfW, 28);
 
             if (_autoRunning)
             {
-                if (Button.Draw(x, btnY, halfW, 26, "STOP",
+                if (UIButton.Draw(leftBtn, "Stop",
                         new Color4(100, 40, 40), new Color4(140, 50, 50), UIColors.Text))
                     StopAuto();
             }
@@ -362,15 +372,36 @@ namespace AutoReforge
                 bool canStart = Main.reforgeItem?.type > 0 && _selectedPrefixId > 0;
                 Color4 bg    = canStart ? new Color4(40, 80, 40)  : new Color4(45, 45, 55);
                 Color4 hover = canStart ? new Color4(60, 120, 60) : new Color4(45, 45, 55);
-                if (Button.Draw(x, btnY, halfW, 26, "AUTO-REFORGE", bg, hover, UIColors.Text) && canStart)
+                if (UIButton.Draw(leftBtn, "Auto Reforge", bg, hover, UIColors.Text) && canStart)
                     StartAuto();
             }
 
-            if (Button.Draw(x + halfW + 4, btnY, halfW, 26, "Reset Stats"))
+            if (UIButton.Draw(rightBtn, "Reset Stats"))
             {
                 _attempts       = 0;
                 _totalSpent     = 0;
                 _lastStopReason = StopReason.None;
+            }
+        }
+
+        private (string text, Color4 color) GetStatus()
+        {
+            if (_autoRunning)
+                return ($"Running… {_attempts} attempt{(_attempts == 1 ? "" : "s")}  {FormatCoins(_totalSpent)}", UIColors.Warning);
+
+            switch (_lastStopReason)
+            {
+                case StopReason.Success:
+                    return ($"Got it!  {_attempts} attempt{(_attempts == 1 ? "" : "s")}  ({FormatCoins(_totalSpent)})", UIColors.Success);
+                case StopReason.OutOfMoney:
+                    return ($"Stopped: out of money  ({_attempts} attempts)", UIColors.Error);
+                case StopReason.BelowThreshold:
+                    return ($"Stopped: below {_minMoneyGold}g threshold  ({_attempts} attempts)", UIColors.Warning);
+                default:
+                    bool hasSelection = _selectedPrefixId > 0;
+                    return hasSelection
+                        ? ($"Target: {Lang.prefix[_selectedPrefixId]?.Value ?? $"#{_selectedPrefixId}"}", UIColors.Info)
+                        : ("Select a modifier above", UIColors.TextHint);
             }
         }
 
@@ -396,7 +427,7 @@ namespace AutoReforge
             _autoRunning    = false;
             _lastStopReason = reason;
             if (reason == StopReason.Success)
-                SoundEngine.PlaySound(SoundID.BestReforge); // celebratory sound on success
+                SoundEngine.PlaySound(SoundID.BestReforge);
         }
 
         // ── Prefix list helpers ───────────────────────────────────────────────────
@@ -444,10 +475,10 @@ namespace AutoReforge
                 if (item == null || item.stack <= 0) continue;
                 switch (item.type)
                 {
-                    case ItemID.CopperCoin:    total += item.stack; break;
-                    case ItemID.SilverCoin:    total += (long)item.stack * 100; break;
-                    case ItemID.GoldCoin:      total += (long)item.stack * 10_000; break;
-                    case ItemID.PlatinumCoin:  total += (long)item.stack * 1_000_000; break;
+                    case ItemID.CopperCoin:   total += item.stack; break;
+                    case ItemID.SilverCoin:   total += (long)item.stack * 100; break;
+                    case ItemID.GoldCoin:     total += (long)item.stack * 10_000; break;
+                    case ItemID.PlatinumCoin: total += (long)item.stack * 1_000_000; break;
                 }
             }
             return total;

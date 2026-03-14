@@ -134,10 +134,10 @@ namespace AutoReforge
         {
             switch (tier)
             {
-                case PrefixTier.Best:    return "BEST";
-                case PrefixTier.Good:    return "GOOD";
-                case PrefixTier.Neutral: return "NEUTRAL";
-                case PrefixTier.Bad:     return "BAD";
+                case PrefixTier.Best:    return "Best";
+                case PrefixTier.Good:    return "Good";
+                case PrefixTier.Neutral: return "Neutral";
+                case PrefixTier.Bad:     return "Bad";
                 default:                 return "";
             }
         }
