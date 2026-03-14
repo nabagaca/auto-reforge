@@ -58,9 +58,6 @@ namespace AutoReforge
         // Prefix list — rebuilt whenever the item in the reforge slot changes
         private List<PrefixInfo>? _prefixes;
         private int _lastItemType = -1;
-        private int _lastAutoWidth;
-        private int _lastAutoHeight;
-
         // User's selection
         private int _selectedPrefixId = -1;
 
@@ -86,6 +83,7 @@ namespace AutoReforge
             {
                 ShowCloseButton = true,
                 CloseOnEscape   = false,
+                AutoResizeToContent = true,
                 Resizable       = true,
             };
             _panel.OnClose = StopAuto;
@@ -117,7 +115,8 @@ namespace AutoReforge
         private void Open()
         {
             // Position to the right of the vanilla reforge UI (slot is at ~50,270)
-            ApplyAutoSize(force: true);
+            _panel.SetContentSize(PanelWidth - _panel.Padding * 2,
+                PanelHeight - _panel.HeaderHeight - _panel.Padding);
             _panel.Open(300, 235);
             RebuildPrefixList();
         }
@@ -220,7 +219,10 @@ namespace AutoReforge
 
         private void DrawContent()
         {
-            ApplyAutoSize(force: false);
+            _panel.MinWidth = PanelWidth;
+            _panel.MinHeight = PanelHeight;
+            _panel.SetContentSize(PanelWidth - _panel.Padding * 2,
+                PanelHeight - _panel.HeaderHeight - _panel.Padding);
 
             var content = _panel.ContentRect;
 
@@ -461,26 +463,6 @@ namespace AutoReforge
                 h += PrefixRowHeight + RowSpacing;
             }
             return h;
-        }
-
-        private void ApplyAutoSize(bool force)
-        {
-            int targetWidth = PanelWidth;
-            int targetHeight = Math.Max(BasePanelHeight, PanelHeight);
-
-            _panel.MinWidth = targetWidth;
-            _panel.MinHeight = targetHeight;
-
-            bool shouldResize = force
-                || (_panel.Width == _lastAutoWidth && _panel.Height == _lastAutoHeight)
-                || _panel.Width < targetWidth
-                || _panel.Height < targetHeight;
-
-            if (shouldResize)
-                _panel.SetSize(targetWidth, targetHeight);
-
-            _lastAutoWidth = targetWidth;
-            _lastAutoHeight = targetHeight;
         }
 
         // ── Cost calculation (mirrors vanilla DrawInterface) ──────────────────────
