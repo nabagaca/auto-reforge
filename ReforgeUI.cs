@@ -27,20 +27,26 @@ namespace AutoReforge
     public class ReforgeUI
     {
         // ── Layout constants ──────────────────────────────────────────────────────
-        private const int PanelWidth  = 280;
-        private const int PanelHeight = 560;
-        private const int RowHeight   = 24;
+        private const int BasePanelWidth  = 280;
+        private const int BasePanelHeight = 560;
         private const int RowSpacing  = 2;
-        // FooterH: 3 labels (auto-height) + 2 sliders (12px) + 3 spaces (4px each) + buttons (28px)
-        // All items get gap=2 added by StackLayout.Next, except the last item.
+        private static int PanelWidth => Math.Max(BasePanelWidth, 240 + FlexText.MeasureWidth("Stop if low: keep 100g"));
+        private static int InfoHeight => FlexText.LineHeight * 2 + 8;
+        private static int TierHeaderHeight => Math.Max(18, FlexText.LineHeight + 2);
+        private static int PrefixRowHeight => Math.Max(24, FlexText.LineHeight + 6);
+        private static int SliderHeight => Math.Max(12, (int)Math.Ceiling(FlexText.LineHeight * 0.65f));
+        private static int ButtonHeight => Math.Max(28, FlexText.LineHeight + 10);
+
         private static int FooterH
         {
             get
             {
-                int lh = FlexUI.FontMetrics.LineHeight + 4; // matches StackLayout.Label auto-height
-                return 3 * (lh + 2) + 2 * (12 + 2) + 3 * 4 + 28 + 4; // +4 extra breathing room
+                int labelH = FlexText.LineHeight + 4;
+                return 3 * (labelH + 2) + 2 * (SliderHeight + 2) + 3 * 4 + ButtonHeight + 4;
             }
         }
+
+        private static int PanelHeight => 160 + FooterH + Math.Max(220, 12 * (PrefixRowHeight + RowSpacing));
 
         // ── State ─────────────────────────────────────────────────────────────────
         private readonly UIPanel      _panel;
@@ -52,6 +58,8 @@ namespace AutoReforge
         // Prefix list — rebuilt whenever the item in the reforge slot changes
         private List<PrefixInfo>? _prefixes;
         private int _lastItemType = -1;
+        private int _lastAutoWidth;
+        private int _lastAutoHeight;
 
         // User's selection
         private int _selectedPrefixId = -1;
@@ -109,6 +117,7 @@ namespace AutoReforge
         private void Open()
         {
             // Position to the right of the vanilla reforge UI (slot is at ~50,270)
+            ApplyAutoSize(force: true);
             _panel.Open(300, 235);
             RebuildPrefixList();
         }
@@ -211,11 +220,13 @@ namespace AutoReforge
 
         private void DrawContent()
         {
+            ApplyAutoSize(force: false);
+
             var content = _panel.ContentRect;
 
             // Divide content: info strip at top, footer at bottom, list fills middle
             var (footerRect, upper) = content.SliceBottom(FooterH);
-            var (infoRect,  listRect) = upper.SliceTop(38);
+            var (infoRect,  listRect) = upper.SliceTop(InfoHeight);
 
             DrawInfoArea(infoRect);
             DrawPrefixList(listRect);
@@ -229,14 +240,15 @@ namespace AutoReforge
             var slot    = Main.reforgeItem;
             bool hasItem = slot != null && slot.type > 0;
 
-            UIRenderer.DrawText(
-                TextUtil.Truncate(hasItem ? $"Item: {slot!.Name}" : "Put an item in the reforge slot", rect.W),
+            string itemText = hasItem ? $"Item: {slot!.Name}" : "Put an item in the reforge slot";
+            FlexText.Draw(
+                FlexText.Truncate(itemText, rect.W),
                 rect.X, rect.Y + 2, UIColors.TextHint);
 
             if (hasItem && slot!.prefix > 0)
-                UIRenderer.DrawText(
-                    TextUtil.Truncate($"Current: {Lang.prefix[slot.prefix]?.Value ?? "None"}", rect.W),
-                    rect.X, rect.Y + 18, UIColors.TextDim);
+                FlexText.Draw(
+                    FlexText.Truncate($"Current: {Lang.prefix[slot.prefix]?.Value ?? "None"}", rect.W),
+                    rect.X, rect.Y + 4 + FlexText.LineHeight, UIColors.TextDim);
         }
 
         // ── Prefix list ───────────────────────────────────────────────────────────
@@ -251,8 +263,8 @@ namespace AutoReforge
             if (!hasItem || _prefixes == null || _prefixes.Count == 0)
             {
                 string msg = hasItem ? "Item cannot be reforged" : "No item in slot";
-                int tw = TextUtil.MeasureWidth(msg);
-                UIRenderer.DrawText(msg, listRect.X + (listRect.W - tw) / 2, listRect.Y + listRect.H / 2 - 7, UIColors.TextHint);
+                int tw = FlexText.MeasureWidth(msg);
+                FlexText.Draw(msg, listRect.X + (listRect.W - tw) / 2, listRect.Y + (listRect.H - FlexText.LineHeight) / 2, UIColors.TextHint);
                 UIRenderer.DrawRectOutline(listRect.X, listRect.Y, listRect.W, listRect.H, new Color4(70, 70, 100), 1);
                 return;
             }
@@ -269,25 +281,25 @@ namespace AutoReforge
                 // Tier header
                 if (info.Tier != lastTier)
                 {
-                    if (_scroll.IsVisible(itemY, 18))
+                    if (_scroll.IsVisible(itemY, TierHeaderHeight))
                     {
                         int ry    = _scroll.ContentToScreen(itemY);
-                        int textY = ry + Math.Max(0, (18 - FlexUI.FontMetrics.CapHeight) / 2);
-                        UIRenderer.DrawRect(listRect.X, ry, listRect.W, 18, new Color4(45, 45, 65, 220));
-                        UIRenderer.DrawText(PrefixData.GetTierLabel(info.Tier),
+                        int textY = ry + Math.Max(0, (TierHeaderHeight - FlexText.LineHeight) / 2);
+                        UIRenderer.DrawRect(listRect.X, ry, listRect.W, TierHeaderHeight, new Color4(45, 45, 65, 220));
+                        FlexText.Draw(PrefixData.GetTierLabel(info.Tier),
                             listRect.X + 4, textY, PrefixData.GetTierColor(info.Tier, rowIndex));
                     }
-                    itemY   += 19;
+                    itemY   += TierHeaderHeight + 1;
                     lastTier = info.Tier;
                 }
 
                 // Prefix row
-                if (_scroll.IsVisible(itemY, RowHeight))
+                if (_scroll.IsVisible(itemY, PrefixRowHeight))
                 {
                     int  ry       = _scroll.ContentToScreen(itemY);
                     int  cw       = _scroll.ContentWidth;
                     bool selected  = info.Id == _selectedPrefixId;
-                    bool hovered   = WidgetInput.IsMouseOver(listRect.X, ry, cw, RowHeight);
+                    bool hovered   = WidgetInput.IsMouseOver(listRect.X, ry, cw, PrefixRowHeight);
                     bool isCurrent = Main.reforgeItem?.prefix == info.Id;
 
                     Color4 bg = selected
@@ -297,20 +309,20 @@ namespace AutoReforge
                             : PrefixData.GetTierBgColor(info.Tier);
 
                     // Scissor clip (set by ScrollRegion.Begin) handles boundary clipping.
-                    UIRenderer.DrawRect(listRect.X, ry, cw, RowHeight, bg);
+                    UIRenderer.DrawRect(listRect.X, ry, cw, PrefixRowHeight, bg);
 
                     if (isCurrent)
-                        UIRenderer.DrawRect(listRect.X, ry, 3, RowHeight, new Color4(255, 220, 50));
+                        UIRenderer.DrawRect(listRect.X, ry, 3, PrefixRowHeight, new Color4(255, 220, 50));
 
-                    int textY = ry + Math.Max(0, (RowHeight - FlexUI.FontMetrics.CapHeight) / 2);
+                    int textY = ry + Math.Max(0, (PrefixRowHeight - FlexText.LineHeight) / 2);
                     string label = isCurrent ? $"> {info.Name}" : $"  {info.Name}";
-                    UIRenderer.DrawText(
-                        TextUtil.Truncate(label, cw - 20),
+                    FlexText.Draw(
+                        FlexText.Truncate(label, cw - 20),
                         listRect.X + 4, textY,
                         PrefixData.GetTierColor(info.Tier, rowIndex));
 
                     if (selected)
-                        UIRenderer.DrawText("✓",
+                        FlexText.Draw("✓",
                             listRect.X + cw - 14, textY,
                             new Color4(200, 200, 80));
 
@@ -322,7 +334,7 @@ namespace AutoReforge
                     }
                 }
 
-                itemY += RowHeight + RowSpacing;
+                itemY += PrefixRowHeight + RowSpacing;
                 rowIndex++;
             }
 
@@ -339,7 +351,7 @@ namespace AutoReforge
             // Speed slider
             float reforgesPerSec = 60f / _reforgeInterval;
             stack.Label($"Speed: {reforgesPerSec:F1}/s", UIColors.TextDim);
-            _reforgeInterval = stack.Slider(_speedSt, _reforgeInterval, 4, 60, height: 12);
+            _reforgeInterval = stack.Slider(_speedSt, _reforgeInterval, 4, 60, height: SliderHeight);
             stack.Space(4);
 
             // Money threshold slider
@@ -347,19 +359,19 @@ namespace AutoReforge
                 ? "Stop if low: No minimum"
                 : $"Stop if low: keep {_minMoneyGold}g";
             stack.Label(threshLabel, UIColors.TextDim);
-            _minMoneyGold = stack.Slider(_thresholdSt, _minMoneyGold, 0, 100, height: 12);
+            _minMoneyGold = stack.Slider(_thresholdSt, _minMoneyGold, 0, 100, height: SliderHeight);
             stack.Space(4);
 
             // Status line
             var (statusText, statusColor) = GetStatus();
-            stack.Label(TextUtil.Truncate(statusText, footerRect.W), statusColor);
+            stack.Label(FlexText.Truncate(statusText, footerRect.W), statusColor);
             stack.Space(4);
 
             // Buttons — two halves of the next row
-            var btnRect = stack.Next(28);
+            var btnRect = stack.Next(ButtonHeight);
             int halfW   = (btnRect.W - 4) / 2;
-            var leftBtn  = new UIRect(btnRect.X,             btnRect.Y, halfW, 28);
-            var rightBtn = new UIRect(btnRect.X + halfW + 4, btnRect.Y, halfW, 28);
+            var leftBtn  = new UIRect(btnRect.X,             btnRect.Y, halfW, ButtonHeight);
+            var rightBtn = new UIRect(btnRect.X + halfW + 4, btnRect.Y, halfW, ButtonHeight);
 
             if (_autoRunning)
             {
@@ -445,10 +457,30 @@ namespace AutoReforge
             PrefixTier? lastTier = null;
             foreach (var info in _prefixes)
             {
-                if (info.Tier != lastTier) { h += 19; lastTier = info.Tier; }
-                h += RowHeight + RowSpacing;
+                if (info.Tier != lastTier) { h += TierHeaderHeight + 1; lastTier = info.Tier; }
+                h += PrefixRowHeight + RowSpacing;
             }
             return h;
+        }
+
+        private void ApplyAutoSize(bool force)
+        {
+            int targetWidth = PanelWidth;
+            int targetHeight = Math.Max(BasePanelHeight, PanelHeight);
+
+            _panel.MinWidth = targetWidth;
+            _panel.MinHeight = targetHeight;
+
+            bool shouldResize = force
+                || (_panel.Width == _lastAutoWidth && _panel.Height == _lastAutoHeight)
+                || _panel.Width < targetWidth
+                || _panel.Height < targetHeight;
+
+            if (shouldResize)
+                _panel.SetSize(targetWidth, targetHeight);
+
+            _lastAutoWidth = targetWidth;
+            _lastAutoHeight = targetHeight;
         }
 
         // ── Cost calculation (mirrors vanilla DrawInterface) ──────────────────────
