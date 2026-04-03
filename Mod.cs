@@ -1,10 +1,11 @@
 using TerrariaModder.Core;
+using TerrariaModder.Core.Config;
 using TerrariaModder.Core.Events;
 using TerrariaModder.Core.Logging;
 
 namespace AutoReforge
 {
-    public class Mod : IMod
+    public class Mod : IMod, IModLifecycle
     {
         public string Id      => "auto-reforge";
         public string Name    => "Auto-Reforge";
@@ -31,6 +32,7 @@ namespace AutoReforge
             _log.Info("[AutoReforge] Ready");
         }
 
+        public void OnContentReady(ModContext context) { }
         public void OnWorldLoad()   { }
         public void OnWorldUnload() { }
 
