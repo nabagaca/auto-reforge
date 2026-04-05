@@ -31,7 +31,8 @@ namespace AutoReforge
         private readonly ScrollView     _scroll    = new ScrollView();
         private readonly Slider         _speedSlider     = new Slider();
         private readonly Slider         _thresholdSlider = new Slider();
-        private ILogger? _log;
+        private ILogger?           _log;
+        private AutoReforgeConfig? _config;
 
         // Prefix list — rebuilt whenever the item in the reforge slot changes
         private List<PrefixInfo>? _prefixes;
@@ -39,10 +40,6 @@ namespace AutoReforge
 
         // User's selection
         private int _selectedPrefixId = -1;
-
-        // Settings (persisted within the session)
-        private int _reforgeInterval = 12;  // frames between each reforge (12 ≈ 5/sec)
-        private int _minMoneyGold    = 0;   // gold coins to keep; 0 = no minimum
 
         // Auto-reforge state
         private bool       _autoRunning;
@@ -64,15 +61,27 @@ namespace AutoReforge
                 ShowCloseButton = true,
                 CloseOnEscape  = false,
             };
-            _panel.OnClose = StopAuto;
+            _panel.OnClose = () => {
+                StopAuto();
+                SaveConfig();
+            };
         }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-        public void Initialize(ILogger log)
+        public void Initialize(ILogger log, AutoReforgeConfig config)
         {
-            _log = log;
+            _log    = log;
+            _config = config;
             _panel.RegisterDrawCallback(OnDraw);
+        }
+
+        private void SaveConfig()
+        {
+            if (_config == null) return;
+            _config.PanelX = _panel.X;
+            _config.PanelY = _panel.Y;
+            _config.Save();
         }
 
         public void Unload()
@@ -91,8 +100,8 @@ namespace AutoReforge
 
         private void Open()
         {
-            // Position to the right of the vanilla reforge UI (slot is at ~50,270)
-            _panel.Open(300, 235);
+            // Position from config
+            _panel.Open(_config?.PanelX ?? 300, _config?.PanelY ?? 235);
             RebuildPrefixList();
         }
 
@@ -133,7 +142,7 @@ namespace AutoReforge
 
             // ── Frame rate limiter ────────────────────────────────────────────────
             _reforgeTimer++;
-            if (_reforgeTimer < _reforgeInterval) return;
+            if (_reforgeTimer < (_config?.ReforgeInterval ?? 12)) return;
             _reforgeTimer = 0;
 
             // ── Guards ────────────────────────────────────────────────────────────
@@ -149,7 +158,7 @@ namespace AutoReforge
             // ── Money threshold check ─────────────────────────────────────────────
             long cost  = CalculateReforgeCost(slot);
             long total = GetPlayerCoins();
-            long kept  = (long)_minMoneyGold * 10_000; // gold → copper
+            long kept  = (long)(_config?.MinGoldThreshold ?? 0) * 10_000; // gold → copper
 
             if (total - cost < kept)
             {
@@ -297,20 +306,22 @@ namespace AutoReforge
 
         private void DrawFooter(int x, int y, int width)
         {
+            if (_config == null) return;
+
             // ── Speed slider ──────────────────────────────────────────────────────
-            // Range: 4–60 frames. Lower = faster. We label the right-hand value.
-            float reforgesPerSec = 60f / _reforgeInterval;
+            // Range: 1–60 frames. Lower = faster. We label the right-hand value.
+            float reforgesPerSec = 60f / _config.ReforgeInterval;
             string speedLabel = $"Speed: {reforgesPerSec:F1}/s";
             UIRenderer.DrawText(speedLabel, x, y, UIColors.TextDim);
-            _reforgeInterval = _speedSlider.Draw(x, y + 14, width, 12, _reforgeInterval, 4, 60);
+            _config.ReforgeInterval = _speedSlider.Draw(x, y + 14, width, 12, _config.ReforgeInterval, 1, 60);
 
             // ── Threshold slider ──────────────────────────────────────────────────
-            // Range: 0–100 gold. Show "No min" when 0.
-            string threshLabel = _minMoneyGold == 0
+            // Range: 0–999 gold. Show "No min" when 0.
+            string threshLabel = _config.MinGoldThreshold == 0
                 ? "Stop if low: No minimum"
-                : $"Stop if low: keep {_minMoneyGold}g";
+                : $"Stop if low: keep {_config.MinGoldThreshold}g";
             UIRenderer.DrawText(threshLabel, x, y + 30, UIColors.TextDim);
-            _minMoneyGold = _thresholdSlider.Draw(x, y + 44, width, 12, _minMoneyGold, 0, 100);
+            _config.MinGoldThreshold = _thresholdSlider.Draw(x, y + 44, width, 12, _config.MinGoldThreshold, 0, 999);
 
             // ── Status line ───────────────────────────────────────────────────────
             Color4 statusColor;
@@ -333,7 +344,7 @@ namespace AutoReforge
                         statusColor = UIColors.Error;
                         break;
                     case StopReason.BelowThreshold:
-                        statusText  = $"Stopped: below {_minMoneyGold}g threshold  ({_attempts} attempts)";
+                        statusText  = $"Stopped: below {_config?.MinGoldThreshold ?? 0}g threshold  ({_attempts} attempts)";
                         statusColor = UIColors.Warning;
                         break;
                     default:
@@ -381,7 +392,7 @@ namespace AutoReforge
             if (_selectedPrefixId <= 0) return;
             _attempts       = 0;
             _totalSpent     = 0;
-            _reforgeTimer   = _reforgeInterval; // fire on the very next frame
+            _reforgeTimer   = _config?.ReforgeInterval ?? 12; // fire on the very next frame
             _lastStopReason = StopReason.None;
             _autoRunning    = true;
         }

@@ -6,7 +6,7 @@
     <OutputType>Library</OutputType>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <OutputPath>build\</OutputPath>
+    <OutputPath>..\..\artifacts\bin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
@@ -22,14 +22,12 @@
     <Message Text="[AutoReforge] Deployed to $(TerrariaModsDir)" Importance="high" />
   </Target>
 
-  <!-- TerrariaModder Core — source reference so we always build against latest -->
   <ItemGroup>
-    <ProjectReference Include="..\terraria-modder\src\Core\TerrariaModder.Core.csproj">
+    <ProjectReference Include="..\..\..\terraria-modder\src\Core\TerrariaModder.Core.csproj">
       <Private>false</Private>
     </ProjectReference>
   </ItemGroup>
 
-  <!-- Terraria executable — compile-time only, already loaded at runtime -->
   <ItemGroup>
     <Reference Include="Terraria">
       <HintPath>C:\Program Files (x86)\Steam\steamapps\common\Terraria\Terraria.exe</HintPath>
