@@ -8,7 +8,7 @@ namespace AutoReforge
     {
         public string Id      => "auto-reforge";
         public string Name    => "Auto-Reforge";
-        public string Version => "0.1.0";
+        public string Version => "0.2.0";
 
         private ILogger?           _log;
         private AutoReforgeConfig? _config;

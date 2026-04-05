@@ -522,22 +522,15 @@ def main() -> int:
     Returns:
         0 on success, 1 on error.
     """
-    print(f"{mod_name} Build & Upload Script (Python)")
-    print("========================================\n")
+    global NEXUS_MOD_ID, FILE_GROUP_ID, FILE_CATEGORY, mod_name
 
     args = parse_args()
 
     project_root = Path(__file__).resolve().parent
     env_file = project_root / ".env"
-    manifest_file = project_root / "src" / f"{mod_name}" / "manifest.json"
-    csproj_file = project_root / "src" / f"{mod_name}" / f"{mod_name}.csproj"
-    artifacts_dir = project_root / "artifacts"
 
     try:
         load_env_file(env_file)
-
-        # Load configuration from environment; fail early if missing
-        global NEXUS_MOD_ID, FILE_GROUP_ID, FILE_CATEGORY, mod_name
 
         # Map variable names to their environment keys
         env_vars = {
@@ -572,6 +565,13 @@ def main() -> int:
         api_key = loaded_values["nexus_api_key"]
         github_token = loaded_values["github_token"]
         github_repo = loaded_values["github_repo"]
+
+        print(f"{mod_name} Build & Upload Script")
+        print("========================================\n")
+
+        manifest_file = project_root / "src" / f"{mod_name}" / "manifest.json"
+        csproj_file = project_root / "src" / f"{mod_name}" / f"{mod_name}.csproj"
+        artifacts_dir = project_root / "artifacts"
 
         version = get_mod_version(manifest_file)
         print(f"Mod Version: {version}\n")
