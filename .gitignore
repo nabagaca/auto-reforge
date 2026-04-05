@@ -2,3 +2,6 @@ build/
 obj/
 .claude/
 *.user
+artifacts/
+*.log
+.env
