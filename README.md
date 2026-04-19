@@ -46,6 +46,6 @@ The panel can also be toggled manually with **F7** (rebindable via the Modder me
 
 ## Requirements
 
-- [TerrariaModder](https://github.com/nabagaca/terraria-modder) `>=0.2.0`
+- [TerrariaModder](https://github.com/nabagaca/terraria-modder) `>=0.4.0`
 - Terraria 1.4.x (Steam)
 - .NET Framework 4.8
