@@ -25,6 +25,8 @@ namespace AutoReforge
         private const int RowHeight   = 22;
         private const int RowSpacing  = 2;
         private const int FooterH     = 130; // status + sliders + buttons
+        private const int ButtonGap   = 4;
+        private const int ButtonTextPad = 12; // Matches Button.Draw's 6px padding on each side.
 
         // ── State ─────────────────────────────────────────────────────────────────
         private readonly DraggablePanel _panel;
@@ -197,6 +199,8 @@ namespace AutoReforge
 
         private void DrawContent()
         {
+            EnsurePanelWidth();
+
             int px = _panel.ContentX;
             int py = _panel.ContentY;
             int pw = _panel.ContentWidth;
@@ -359,12 +363,32 @@ namespace AutoReforge
             UIRenderer.DrawText(TextUtil.Truncate(statusText, width), x, y + 60, statusColor);
 
             // ── Buttons ───────────────────────────────────────────────────────────
-            int btnY  = y + 78;
-            int halfW = (width - 4) / 2;
+            int btnY = y + 78;
+
+            string leftLabel  = _autoRunning ? "STOP" : "Auto Reforge";
+            string rightLabel = "Reset Stats";
+
+            int leftMinW  = TextUtil.MeasureWidth(leftLabel) + ButtonTextPad;
+            int rightMinW = TextUtil.MeasureWidth(rightLabel) + ButtonTextPad;
+            int minTotalW = leftMinW + rightMinW + ButtonGap;
+
+            int leftW;
+            int rightW;
+            if (minTotalW <= width)
+            {
+                int extra = width - minTotalW;
+                leftW  = leftMinW + extra / 2;
+                rightW = width - leftW - ButtonGap;
+            }
+            else
+            {
+                leftW  = (width - ButtonGap) / 2;
+                rightW = width - leftW - ButtonGap;
+            }
 
             if (_autoRunning)
             {
-                if (Button.Draw(x, btnY, halfW, 26, "STOP",
+                if (Button.Draw(x, btnY, leftW, 26, leftLabel,
                         new Color4(100, 40, 40), new Color4(140, 50, 50), UIColors.Text))
                     StopAuto();
             }
@@ -373,16 +397,33 @@ namespace AutoReforge
                 bool canStart = Main.reforgeItem?.type > 0 && _selectedPrefixId > 0;
                 Color4 bg    = canStart ? new Color4(40, 80, 40)  : new Color4(45, 45, 55);
                 Color4 hover = canStart ? new Color4(60, 120, 60) : new Color4(45, 45, 55);
-                if (Button.Draw(x, btnY, halfW, 26, "AUTO-REFORGE", bg, hover, UIColors.Text) && canStart)
+                if (Button.Draw(x, btnY, leftW, 26, leftLabel, bg, hover, UIColors.Text) && canStart)
                     StartAuto();
             }
 
-            if (Button.Draw(x + halfW + 4, btnY, halfW, 26, "Reset Stats"))
+            if (Button.Draw(x + leftW + ButtonGap, btnY, rightW, 26, rightLabel))
             {
                 _attempts       = 0;
                 _totalSpent     = 0;
                 _lastStopReason = StopReason.None;
             }
+        }
+
+        private void EnsurePanelWidth()
+        {
+            int minimumContentWidth = PanelWidth - _panel.Padding * 2;
+            int requiredContentWidth = Math.Max(minimumContentWidth, GetRequiredFooterWidth());
+            int requiredPanelWidth = requiredContentWidth + _panel.Padding * 2;
+
+            if (_panel.Width != requiredPanelWidth)
+                _panel.Width = requiredPanelWidth;
+        }
+
+        private static int GetRequiredFooterWidth()
+        {
+            int leftMinW  = TextUtil.MeasureWidth("Auto Reforge") + ButtonTextPad;
+            int rightMinW = TextUtil.MeasureWidth("Reset Stats") + ButtonTextPad;
+            return leftMinW + rightMinW + ButtonGap;
         }
 
         // ── Auto-reforge state helpers ────────────────────────────────────────────
@@ -443,25 +484,19 @@ namespace AutoReforge
             return Math.Max(1, cost);
         }
 
-        // ── Player coin count (all main inventory + coin slots; not banks) ────────
+        // ── Player coin count (mirrors vanilla BuyItem availability logic) ────────
 
         private static long GetPlayerCoins()
         {
             var player = Main.player[Main.myPlayer];
-            long total = 0;
-            for (int i = 0; i < 58; i++) // 0-53 main inventory, 54-57 coin slots
-            {
-                var item = player.inventory[i];
-                if (item == null || item.stack <= 0) continue;
-                switch (item.type)
-                {
-                    case ItemID.CopperCoin:    total += item.stack; break;
-                    case ItemID.SilverCoin:    total += (long)item.stack * 100; break;
-                    case ItemID.GoldCoin:      total += (long)item.stack * 10_000; break;
-                    case ItemID.PlatinumCoin:  total += (long)item.stack * 1_000_000; break;
-                }
-            }
-            return total;
+            bool overflowing;
+            long inventoryCoins = Utils.CoinsCount(out overflowing, player.inventory, 58, 57, 56, 55, 54);
+            long piggyCoins     = Utils.CoinsCount(out overflowing, player.bank.item);
+            long safeCoins      = Utils.CoinsCount(out overflowing, player.bank2.item);
+            long forgeCoins     = Utils.CoinsCount(out overflowing, player.bank3.item);
+            long voidCoins      = Utils.CoinsCount(out overflowing, player.bank4.item);
+
+            return Utils.CoinsCombineStacks(out overflowing, inventoryCoins, piggyCoins, safeCoins, forgeCoins, voidCoins);
         }
 
         // ── Coin display helper ───────────────────────────────────────────────────
